@@ -85,8 +85,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                 extra_free_percent=config.extra_free_percent,
                 scope=args.scope,
             )
-            if len(moves) != len(fixtures):
-                raise RuntimeError(f"Expected {len(fixtures)} scoped moves, planned {len(moves)}")
+            if len(moves) != len(relative_fixtures):
+                raise RuntimeError(f"Expected {len(relative_fixtures)} scoped moves, planned {len(moves)}")
             print(f"{'LIVE' if args.live else 'DRY RUN'}: {len(moves)} scoped move(s) planned")
             for move in moves:
                 print(f"{move.reason}: {move.source_path} -> {move.destination_path}")
