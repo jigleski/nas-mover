@@ -60,9 +60,20 @@ For each planned file, live mode:
 Normal `nas-mover` execution is dry-run by default. `--live` is required to
 change files.
 
-## This NAS
+## Configure Your NAS
 
-The validated NAS configuration uses `/mnt/nas/data` as the mergerfs pool:
+The tool can discover the standard `/etc/fstab` location automatically. If
+there is exactly one `fuse.mergerfs` entry, its mountpoint is selected. If
+there are multiple pools, set `mount_override` in the config or pass `--mount`.
+
+Inspect your own mergerfs configuration before installing the mover:
+
+```bash
+sudo grep -n 'fuse\.mergerfs' /etc/fstab
+findmnt -t fuse.mergerfs
+```
+
+The following is an example branch layout, not a required layout:
 
 ```text
 /mnt/nas/ssd1-data/data
@@ -73,15 +84,8 @@ The validated NAS configuration uses `/mnt/nas/data` as the mergerfs pool:
 /mnt/nas/hdd6-data/data
 ```
 
-The parity filesystems are not mergerfs data branches and are intentionally
-excluded. The configuration also specifies `minfreespace=20G`.
-
-Verify the live configuration before using this tool:
-
-```bash
-sudo grep -nE 'fuse\.mergerfs|/mnt/nas' /etc/fstab
-findmnt -t fuse.mergerfs
-```
+Parity filesystems should not be listed as mergerfs data branches. Check your
+own fstab entry for `minfreespace`; the mover honors that reserve.
 
 The program reads `/etc/fstab` by default and checks that the selected pool and
 every branch are mounted. If fstab contains exactly one mergerfs entry, its
@@ -91,8 +95,8 @@ program does not mount, unlock, or repair filesystems.
 
 ## Install On The NAS
 
-The current development branch is `initial-setup`. Install it in an isolated
-virtual environment:
+Install the release branch or tag you have reviewed in an isolated virtual
+environment:
 
 ```bash
 sudo apt update
@@ -100,7 +104,7 @@ sudo apt install -y git python3 python3-venv python3-pip
 
 sudo mkdir -p /opt/nas-mover
 sudo chown "$USER:$USER" /opt/nas-mover
-git clone --branch initial-setup https://github.com/jigleski/nas-mover.git /opt/nas-mover
+git clone https://github.com/jigleski/nas-mover.git /opt/nas-mover
 
 cd /opt/nas-mover
 python3 -m venv .venv
@@ -147,13 +151,15 @@ For later updates:
 ```bash
 cd /opt/nas-mover
 source .venv/bin/activate
-git pull --ff-only origin initial-setup
+git pull --ff-only origin main
 python -m pip install -e .
 ```
 
-## Test The NAS Integration
+## Required End-User Validation
 
-Run the complete local suite on the NAS first:
+Before relying on the mover, validate it against a dedicated test directory in
+your own mergerfs data branches. Do not use a directory containing production
+files. Keep the repository's automated tests separate from this live test:
 
 ```bash
 cd /opt/nas-mover
@@ -162,13 +168,12 @@ python -m pytest
 ```
 
 The suite uses real temporary files for transfer behavior and mocks Linux
-commands in unit tests. The opt-in live test command below exercises the real
-mounted mergerfs pool.
+commands in unit tests. The commands below exercise your actual fstab,
+mountpoint, branch devices, permissions, and mergerfs layout.
 
-### One-command live test
-
-Use a dedicated relative directory on every mergerfs data branch. The tested
-NAS workflow uses `mover-test/source`:
+Choose a relative scope that is unused on every data branch, for example
+`mover-test/source`. Create that directory on each branch listed by your
+mergerfs fstab entry. Then run the one-command validation:
 
 ```bash
 sudo /opt/nas-mover/.venv/bin/nas-mover-test-suite \
@@ -193,12 +198,22 @@ scope containing production files. The `--live` flag is intentionally required.
 The harness uses a zero watermark only for these six controlled fixtures;
 that does not change the production default of `80%`.
 
+Before the live command, you may omit `--live` to create fixtures, print the
+scoped plan, and clean them up without moving files:
+
 To run the same setup and scoped dry run without moving files, omit `--live`:
 
 ```bash
 sudo /opt/nas-mover/.venv/bin/nas-mover-test-suite \
   --scope mover-test/source
 ```
+
+### Review the result
+
+Confirm that the live command reports successful copy, SHA-256 verification,
+source deletion, and cleanup. Independently inspect each branch and confirm
+that only the six generated `test-*.bin` files were involved. If any path is
+unexpected, stop and investigate before using the mover on production data.
 
 ## Normal Operation
 
@@ -209,9 +224,9 @@ sudo /opt/nas-mover/.venv/bin/nas-mover \
   --fstab /etc/fstab
 ```
 
-For a scoped test directory, add `--scope mover-test/source`. The `--scope`
-value is relative to every mergerfs branch; absolute paths and `..` traversal
-are rejected.
+For a selected pool, add `--mount /path/to/mergerfs/mount`. The `--scope`
+option is for controlled testing and is relative to every mergerfs branch;
+absolute paths and `..` traversal are rejected.
 
 Do not use `--watermark 0 --tolerance 0` for normal operation. Those overrides
 exist only to force a controlled test plan with tiny fixture files.
