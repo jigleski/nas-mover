@@ -17,6 +17,7 @@ test = [
 [project.scripts]
 nas-mover = "nas_mover.cli:main"
 nas-mover-test-fixtures = "nas_mover.sandbox_cli:main"
+nas-mover-test-suite = "nas_mover.test_suite:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -35,6 +36,7 @@ omit = [
     "src/nas_mover/locking.py",
     "src/nas_mover/__main__.py",
     "src/nas_mover/sandbox_cli.py",
+    "src/nas_mover/test_suite.py",
 ]
 
 [tool.coverage.report]

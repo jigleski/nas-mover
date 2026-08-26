@@ -52,6 +52,16 @@ Use a dedicated mergerfs test pool for this sequence. The fixture command
 refuses filesystem roots and traversal outside its supplied sandbox, and
 cleanup removes only its named `test-*.bin` files.
 
+For a single command that runs pytest, creates scoped fixtures, prints the
+plan, performs the live copy/verify/delete test, and cleans up afterward:
+
+```text
+sudo nas-mover-test-suite --scope mover-test/source --live
+```
+
+Omit `--live` to run pytest and the scoped dry run while leaving no fixtures
+behind. The command uses a zero watermark only for its six controlled fixtures.
+
 Pytest enables branch coverage and enforces a 90% total threshold. Tests use
 `tmp_path` for real file operations. The live integration test is skipped unless
 `NAS_MOVER_TEST_SANDBOX` points to a dedicated non-root sandbox directory:
