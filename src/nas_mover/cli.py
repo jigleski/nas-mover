@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import argparse
+from collections.abc import Sequence
+from pathlib import Path
+
+from .config import MoverConfig
+from .discovery import discover_branches, parse_fstab
+from .locking import process_lock
+from .models import PoolConfig
+from .planner import plan_moves
+from .transfer import execute_move
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Balance mergerfs SSD storage and spill excess to HDD.")
+    parser.add_argument("--live", action="store_true", help="Apply the plan; dry-run is the default.")
+    parser.add_argument("--fstab", type=str, default=None, help="Override the fstab path.")
+    parser.add_argument("--mount", type=str, default=None, help="Select one mergerfs mountpoint.")
+    return parser
+
+
+def run(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    config = MoverConfig(
+        fstab_path=Path(args.fstab) if args.fstab else MoverConfig().fstab_path,
+        mount_override=Path(args.mount) if args.mount else MoverConfig().mount_override,
+    )
+    config.validate()
+    with process_lock(config.lock_path):
+        pool = parse_fstab(config.fstab_path, config.mount_override)
+        branches = discover_branches(pool)
+        ssds = [branch for branch in branches if not branch.rotational]
+        hdds = [branch for branch in branches if branch.rotational]
+        if len(ssds) < 2:
+            raise RuntimeError(f"Expected at least two SSD branches; found {len(ssds)}")
+        if not hdds:
+            raise RuntimeError("No HDD branches were discovered")
+        moves = plan_moves(
+            ssds, hdds, PoolConfig(pool.min_free_bytes),
+            watermark_percent=config.watermark_percent,
+            tolerance_percent=config.tolerance_percent,
+            policy=config.policy,
+            extra_free_percent=config.extra_free_percent,
+        )
+        print(f"{'LIVE' if args.live else 'DRY RUN'}: {len(moves)} move(s) planned")
+        for move in moves:
+            print(f"{move.reason}: {move.source_path} -> {move.destination_path}")
+        if args.live:
+            for move in moves:
+                execute_move(move, verify=config.verification)  # type: ignore[arg-type]
+    return 0
+
+
+def main() -> int:
+    try:
+        return run()
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

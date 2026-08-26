@@ -1,8 +1,11 @@
 # nas-mover
 
-Safety-conscious planner and mover for tiered mergerFS storage. The original
-host-facing one-shot script remains at `original-oneshot.py`; the testable core
-is in `src/nas_mover`.
+Safety-conscious planner and mover for tiered mergerFS storage. The implementation
+is organized as a testable package in `src/nas_mover`.
+
+The package separates domain models, mergerfs policy selection, move planning,
+Linux host discovery, locking, and filesystem transfer. `nas-mover` is
+dry-run by default; `--live` is required to apply a plan.
 
 ## Development
 
@@ -12,6 +15,29 @@ Install the package and test dependencies in an isolated environment:
 python -m pip install -e ".[test]"
 python -m pytest
 ```
+
+Run a Linux host discovery and dry run with the installed command:
+
+```text
+nas-mover --fstab /etc/fstab --mount /mnt/nas/data
+nas-mover --live --fstab /etc/fstab --mount /mnt/nas/data
+```
+
+The live form should only be used after reviewing the preceding dry-run output.
+
+Prepare a dedicated NAS sandbox with six fixture files, then clean up only
+those files after testing:
+
+```text
+nas-mover-test-fixtures /mnt/nas/ssd1-data/data/mover-test
+nas-mover --fstab /etc/fstab --mount /mnt/nas/data
+nas-mover --live --fstab /etc/fstab --mount /mnt/nas/data
+nas-mover-test-fixtures /mnt/nas/ssd1-data/data/mover-test --cleanup
+```
+
+Use a dedicated mergerfs test pool for this sequence. The fixture command
+refuses filesystem roots and traversal outside its supplied sandbox, and
+cleanup removes only its named `test-*.bin` files.
 
 Pytest enables branch coverage and enforces a 90% total threshold. Tests use
 `tmp_path` for real file operations. The live integration test is skipped unless

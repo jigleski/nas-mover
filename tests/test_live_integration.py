@@ -1,10 +1,10 @@
 import os
-import uuid
 from pathlib import Path
 
 import pytest
 
 from nas_mover import Branch, PlannedMove, execute_move
+from nas_mover.sandbox import Sandbox
 
 
 @pytest.mark.integration
@@ -13,18 +13,17 @@ def test_live_sandbox_move() -> None:
     if not sandbox_value:
         pytest.skip("Set NAS_MOVER_TEST_SANDBOX to run live sandbox tests")
 
-    sandbox = Path(sandbox_value).resolve()
-    if sandbox == Path(sandbox.anchor) or sandbox == Path.cwd().resolve():
-        pytest.fail("Refusing an unsafe or repository-root integration sandbox")
-    source_root = (sandbox / "source").resolve()
-    destination_root = (sandbox / "destination").resolve()
-    if not source_root.is_relative_to(sandbox) or not destination_root.is_relative_to(sandbox):
-        pytest.fail("Integration branch paths must remain inside the sandbox")
-    sandbox.mkdir(parents=True, exist_ok=True)
+    try:
+        sandbox = Sandbox(Path(sandbox_value))
+    except ValueError as exc:
+        pytest.fail(str(exc))
+    source_root = sandbox.path(Path("source"))
+    destination_root = sandbox.path(Path("destination"))
+    sandbox.root.mkdir(parents=True, exist_ok=True)
     source_root.mkdir(exist_ok=True)
     destination_root.mkdir(exist_ok=True)
-    source = source_root / f"fixture-{uuid.uuid4().hex}.bin"
-    source.write_bytes(b"sandbox only")
+    fixtures = sandbox.create_fixtures(1)
+    source = sandbox.path(fixtures[0])
 
     move = PlannedMove(
         Branch(source_root, 0, False, 100, 90, 10),
@@ -33,5 +32,7 @@ def test_live_sandbox_move() -> None:
         source.stat().st_atime, source.stat().st_mtime, "integration",
     )
     execute_move(move, verify="sha256")
-    assert (destination_root / "fixture.bin").read_bytes() == b"sandbox only"
+    assert (destination_root / "test-1.bin").read_bytes() == b"nas-mover test fixture 1\n"
     assert not source.exists()
+    sandbox.remove_fixtures(fixtures)
+    (destination_root / "test-1.bin").unlink()
