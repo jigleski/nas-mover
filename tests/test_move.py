@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -62,7 +63,9 @@ def test_execute_move_refuses_source_changed_during_copy(tmp_path: Path, monkeyp
 
     def changing_copy(source_path: Path, destination_path: Path) -> None:
         original_copy(source_path, destination_path)
+        source_stat = source_path.stat()
         source_path.touch()
+        os.utime(source_path, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns + 1_000_000_000))
 
     monkeypatch.setattr("nas_mover.transfer.shutil.copy2", changing_copy)
     with pytest.raises(RuntimeError, match="changed"):
@@ -112,6 +115,15 @@ def test_execute_move_tolerates_missing_temp_during_cleanup(tmp_path: Path, monk
     with pytest.raises(OSError, match="replace failed"):
         execute_move(move)
     assert source.exists()
+
+
+def test_execute_move_supports_platforms_without_directory_fsync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    move, source, destination = make_move(tmp_path)
+    import nas_mover.transfer as transfer
+    monkeypatch.delattr(transfer.os, "O_DIRECTORY", raising=False)
+    execute_move(move)
+    assert destination.exists()
+    assert not source.exists()
 
 
 def test_execute_move_rejects_unknown_verification_mode(tmp_path: Path) -> None:
