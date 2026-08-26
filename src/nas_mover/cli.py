@@ -17,6 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_true", help="Apply the plan; dry-run is the default.")
     parser.add_argument("--fstab", type=str, default=None, help="Override the fstab path.")
     parser.add_argument("--mount", type=str, default=None, help="Select one mergerfs mountpoint.")
+    parser.add_argument("--lock", type=str, default=None, help="Override the lock path for testing or staging.")
     return parser
 
 
@@ -25,6 +26,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     config = MoverConfig(
         fstab_path=Path(args.fstab) if args.fstab else MoverConfig().fstab_path,
         mount_override=Path(args.mount) if args.mount else MoverConfig().mount_override,
+        lock_path=Path(args.lock) if args.lock else MoverConfig().lock_path,
     )
     config.validate()
     with process_lock(config.lock_path):

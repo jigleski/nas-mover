@@ -134,9 +134,10 @@ def test_cli_is_dry_run_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     execute = SimpleNamespace(called=False)
     monkeypatch.setattr("nas_mover.cli.execute_move", lambda *args, **kwargs: setattr(execute, "called", True))
 
-    assert run(["--fstab", str(fstab), "--mount", "/pool"]) == 0
+    lock = tmp_path / "nas-mover.lock"
+    assert run(["--fstab", str(fstab), "--mount", "/pool", "--lock", str(lock)]) == 0
     assert "DRY RUN" in capsys.readouterr().out
     assert not execute.called
 
-    assert run(["--live", "--fstab", str(fstab), "--mount", "/pool"]) == 0
+    assert run(["--live", "--fstab", str(fstab), "--mount", "/pool", "--lock", str(lock)]) == 0
     assert execute.called
