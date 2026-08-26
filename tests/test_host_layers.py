@@ -23,6 +23,7 @@ def test_config_uses_production_defaults_and_validates() -> None:
     config = MoverConfig()
     config.validate()
     assert (config.watermark_percent, config.tolerance_percent) == (80.0, 2.0)
+    assert config.mount_override is None
     assert parse_size("20G") == 20 * 1024**3
     with pytest.raises(ValueError, match="Invalid size"):
         parse_size("not-a-size")
@@ -41,6 +42,37 @@ def test_config_rejects_unsafe_values() -> None:
         MoverConfig(min_file_age_hours=-1).validate()
     with pytest.raises(ValueError, match="extra_free"):
         MoverConfig(extra_free_percent=-1).validate()
+
+
+def test_config_loads_toml_and_converts_paths(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        'watermark_percent = 75.0\n'
+        'tolerance_percent = 3.0\n'
+        'policy = "ff"\n'
+        'verification = "sha256"\n'
+        'fstab_path = "/tmp/test-fstab"\n'
+        'mount_override = "/tmp/test-pool"\n'
+        'lock_path = "/tmp/test.lock"\n'
+    )
+    config = MoverConfig.from_file(config_file)
+    assert config.watermark_percent == 75.0
+    assert config.policy == "ff"
+    assert config.fstab_path == Path("/tmp/test-fstab")
+    assert config.mount_override == Path("/tmp/test-pool")
+    assert config.lock_path == Path("/tmp/test.lock")
+
+
+def test_config_rejects_unknown_keys_and_missing_files(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        MoverConfig.from_file(tmp_path / "missing.toml")
+    config_file = tmp_path / "unknown.toml"
+    config_file.write_text("watermark_percent = 80\nwatremark_percent = 80\n")
+    with pytest.raises(ValueError, match="Unknown"):
+        MoverConfig.from_file(config_file)
+    minimal = tmp_path / "minimal.toml"
+    minimal.write_text("watermark_percent = 80\n")
+    assert MoverConfig.from_file(minimal).lock_path == Path("/run/lock/nas-mover.lock")
 
 
 def test_sandbox_rejects_root_and_escape_paths(tmp_path: Path) -> None:
@@ -77,6 +109,7 @@ def test_parse_fstab_selects_mergerfs_and_reads_reserve(tmp_path: Path) -> None:
         Path("/pool"), [Path("/ssd1"), Path("/ssd2"), Path("/hdd")],
         {"defaults": True, "minfreespace": "20G"}, 20 * 1024**3,
     )
+    assert parse_fstab(fstab).mountpoint == Path("/pool")
 
 
 def test_parse_fstab_rejects_missing_or_ambiguous_pool(tmp_path: Path) -> None:

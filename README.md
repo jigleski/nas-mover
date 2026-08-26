@@ -83,8 +83,11 @@ sudo grep -nE 'fuse\.mergerfs|/mnt/nas' /etc/fstab
 findmnt -t fuse.mergerfs
 ```
 
-The program reads fstab and checks that the pool and every branch are mounted.
-It does not mount, unlock, or repair filesystems.
+The program reads `/etc/fstab` by default and checks that the selected pool and
+every branch are mounted. If fstab contains exactly one mergerfs entry, its
+mountpoint is selected automatically. If there are multiple entries, use
+`mount_override` in the config or `--mount` to select one explicitly. The
+program does not mount, unlock, or repair filesystems.
 
 ## Install On The NAS
 
@@ -105,6 +108,39 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[test]'
 ```
+
+### Host configuration
+
+Copy [config.example.toml](config.example.toml) to `/etc/nas-mover/config.toml`
+and edit the host-specific values. The file is TOML, so lines beginning with
+`#` are comments. Paths, percentages, policy, age filtering, reserve space,
+and verification mode are all documented there. The loader rejects unknown
+keys and invalid enum values.
+
+```bash
+sudo install -d -m 0755 /etc/nas-mover
+sudo cp config.example.toml /etc/nas-mover/config.toml
+sudoedit /etc/nas-mover/config.toml
+```
+
+Use it explicitly. With one mergerfs pool, the mountpoint is auto-detected:
+
+```bash
+sudo /opt/nas-mover/.venv/bin/nas-mover \
+  --config /etc/nas-mover/config.toml
+```
+
+For multiple mergerfs pools, set `mount_override` in the config or select one
+for a single run:
+
+```bash
+sudo /opt/nas-mover/.venv/bin/nas-mover \
+  --config /etc/nas-mover/config.toml \
+  --mount /mnt/nas/data
+```
+
+CLI flags such as `--fstab`, `--mount`, `--scope`, and `--lock` override the
+file for a single run. Keep test-only overrides out of the production config.
 
 For later updates:
 
@@ -136,6 +172,7 @@ NAS workflow uses `mover-test/source`:
 
 ```bash
 sudo /opt/nas-mover/.venv/bin/nas-mover-test-suite \
+  --config /etc/nas-mover/config.toml \
   --scope mover-test/source \
   --live
 ```
@@ -169,8 +206,7 @@ Always start with a dry run and review every proposed path:
 
 ```bash
 sudo /opt/nas-mover/.venv/bin/nas-mover \
-  --fstab /etc/fstab \
-  --mount /mnt/nas/data
+  --fstab /etc/fstab
 ```
 
 For a scoped test directory, add `--scope mover-test/source`. The `--scope`

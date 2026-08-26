@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from dataclasses import replace
 
 from .policy import Policy, SUPPORTED_POLICIES
 
@@ -16,8 +18,34 @@ class MoverConfig:
     extra_free_percent: float = 0.0
     verification: str = "size"
     fstab_path: Path = Path("/etc/fstab")
-    mount_override: Path | None = Path("/mnt/nas/data")
+    # None means select the sole fuse.mergerfs entry from fstab automatically.
+    mount_override: Path | None = None
     lock_path: Path = Path("/run/lock/nas-mover.lock")
+
+    @classmethod
+    def from_file(cls, path: Path) -> "MoverConfig":
+        if not path.is_file():
+            raise FileNotFoundError(f"Configuration file not found: {path}")
+        with path.open("rb") as handle:
+            values = tomllib.load(handle)
+        unknown = set(values) - {
+            "watermark_percent", "tolerance_percent", "policy",
+            "min_file_age_hours", "extra_free_percent", "verification",
+            "fstab_path", "mount_override", "lock_path",
+        }
+        if unknown:
+            raise ValueError(f"Unknown configuration option(s): {', '.join(sorted(unknown))}")
+        path_values = {
+            "fstab_path": Path,
+            "mount_override": lambda value: Path(value) if value is not None else None,
+            "lock_path": Path,
+        }
+        for key, converter in path_values.items():
+            if key in values:
+                values[key] = converter(values[key])
+        config = replace(cls(), **values)
+        config.validate()
+        return config
 
     def validate(self) -> None:
         if not 0 <= self.watermark_percent <= 100:

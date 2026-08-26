@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
@@ -28,10 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run pytest and a scoped NAS mover integration test."
     )
-    parser.add_argument("--fstab", type=Path, default=Path("/etc/fstab"))
-    parser.add_argument("--mount", type=Path, default=Path("/mnt/nas/data"))
+    parser.add_argument("--config", type=Path, default=None, help="Path to an editable TOML configuration file.")
+    parser.add_argument("--fstab", type=Path, default=None)
+        parser.add_argument("--mount", type=Path, default=None)
     parser.add_argument("--scope", type=Path, required=True, help="Relative test directory on every branch.")
-    parser.add_argument("--lock", type=Path, default=Path("/run/lock/nas-mover.lock"))
+    parser.add_argument("--lock", type=Path, default=None)
     parser.add_argument("--live", action="store_true", help="Apply the scoped integration plan.")
     return parser
 
@@ -50,10 +52,12 @@ def _run_pytest() -> None:
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _validate_scope(args.scope)
-    config = MoverConfig(
-        fstab_path=args.fstab,
-        mount_override=args.mount,
-        lock_path=args.lock,
+    config = MoverConfig.from_file(args.config) if args.config else MoverConfig()
+    config = replace(
+        config,
+        fstab_path=args.fstab if args.fstab else config.fstab_path,
+        mount_override=args.mount if args.mount else config.mount_override,
+        lock_path=args.lock if args.lock else config.lock_path,
     )
     config.validate()
     _run_pytest()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from .config import MoverConfig
@@ -15,9 +16,10 @@ from .transfer import execute_move
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Balance mergerfs SSD storage and spill excess to HDD.")
     parser.add_argument("--live", action="store_true", help="Apply the plan; dry-run is the default.")
-    parser.add_argument("--fstab", type=str, default=None, help="Override the fstab path.")
-    parser.add_argument("--mount", type=str, default=None, help="Select one mergerfs mountpoint.")
-    parser.add_argument("--lock", type=str, default=None, help="Override the lock path for testing or staging.")
+    parser.add_argument("--config", type=str, default=None, help="Path to an editable TOML configuration file.")
+    parser.add_argument("--fstab", type=str, default=None, help="Override the configured fstab path.")
+    parser.add_argument("--mount", type=str, default=None, help="Override the configured mergerfs mountpoint.")
+    parser.add_argument("--lock", type=str, default=None, help="Override the configured lock path for testing or staging.")
     parser.add_argument("--scope", type=str, default=None, help="Restrict planning to a relative branch directory.")
     parser.add_argument("--watermark", type=float, default=None, help="Override the SSD watermark percentage for testing.")
     parser.add_argument("--tolerance", type=float, default=None, help="Override the SSD watermark tolerance for testing.")
@@ -26,12 +28,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    config = MoverConfig(
-        fstab_path=Path(args.fstab) if args.fstab else MoverConfig().fstab_path,
-        mount_override=Path(args.mount) if args.mount else MoverConfig().mount_override,
-        lock_path=Path(args.lock) if args.lock else MoverConfig().lock_path,
-        watermark_percent=args.watermark if args.watermark is not None else MoverConfig().watermark_percent,
-        tolerance_percent=args.tolerance if args.tolerance is not None else MoverConfig().tolerance_percent,
+    config = MoverConfig.from_file(Path(args.config)) if args.config else MoverConfig()
+    config = replace(
+        config,
+        fstab_path=Path(args.fstab) if args.fstab else config.fstab_path,
+        mount_override=Path(args.mount) if args.mount else config.mount_override,
+        lock_path=Path(args.lock) if args.lock else config.lock_path,
+        watermark_percent=args.watermark if args.watermark is not None else config.watermark_percent,
+        tolerance_percent=args.tolerance if args.tolerance is not None else config.tolerance_percent,
     )
     scope = Path(args.scope) if args.scope else Path(".")
     if scope.is_absolute() or ".." in scope.parts:
