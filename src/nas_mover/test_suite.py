@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--config", type=Path, default=None, help="Path to an editable TOML configuration file.")
     parser.add_argument("--fstab", type=Path, default=None)
-        parser.add_argument("--mount", type=Path, default=None)
+    parser.add_argument("--mount", type=Path, default=None)
     parser.add_argument("--scope", type=Path, required=True, help="Relative test directory on every branch.")
     parser.add_argument("--lock", type=Path, default=None)
     parser.add_argument("--live", action="store_true", help="Apply the scoped integration plan.")

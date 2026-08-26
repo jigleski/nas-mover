@@ -245,3 +245,66 @@ python -m pytest
 The measured mover logic currently has a 100% statement and branch coverage
 gate. The command-entry wrappers are excluded from coverage because they only
 delegate into tested functions.
+
+## Command Help
+
+The installed commands provide the following help text.
+
+### `nas-mover --help`
+
+```text
+usage: nas-mover [-h] [--live] [--config CONFIG] [--fstab FSTAB]
+                 [--mount MOUNT] [--lock LOCK] [--scope SCOPE]
+                 [--watermark WATERMARK] [--tolerance TOLERANCE]
+
+Balance mergerfs SSD storage and spill excess to HDD.
+
+options:
+  -h, --help            show this help message and exit
+  --live                Apply the plan; dry-run is the default.
+  --config CONFIG       Path to an editable TOML configuration file.
+  --fstab FSTAB         Override the configured fstab path.
+  --mount MOUNT         Override the configured mergerfs mountpoint.
+  --lock LOCK           Override the configured lock path for testing or
+                        staging.
+  --scope SCOPE         Restrict planning to a relative branch directory.
+  --watermark WATERMARK
+                        Override the SSD watermark percentage for testing.
+  --tolerance TOLERANCE
+                        Override the SSD watermark tolerance for testing.
+```
+
+### `nas-mover-test-fixtures --help`
+
+```text
+usage: nas-mover-test-fixtures [-h] [--count COUNT] [--cleanup] sandbox
+
+Create or remove NAS mover test fixtures in a dedicated sandbox.
+
+positional arguments:
+  sandbox        Dedicated sandbox directory; production mounts are refused.
+
+options:
+  -h, --help     show this help message and exit
+  --count COUNT  Number of test files to create.
+  --cleanup      Remove only the named test files.
+```
+
+### `nas-mover-test-suite --help`
+
+```text
+usage: nas-mover-test-suite [-h] [--config CONFIG] [--fstab FSTAB]
+                            [--mount MOUNT] --scope SCOPE [--lock LOCK]
+                            [--live]
+
+Run pytest and a scoped NAS mover integration test.
+
+options:
+  -h, --help       show this help message and exit
+  --config CONFIG  Path to an editable TOML configuration file.
+  --fstab FSTAB
+  --mount MOUNT
+  --scope SCOPE    Relative test directory on every branch.
+  --lock LOCK
+  --live           Apply the scoped integration plan.
+```
