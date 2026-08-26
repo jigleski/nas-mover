@@ -135,3 +135,16 @@ def test_planner_spills_to_hdd_after_ssds_reach_tolerance(tmp_path: Path) -> Non
     (source.path / "file.bin").write_bytes(b"12")
     moves = plan_moves([source, other], [hdd], PoolConfig(), watermark_percent=80, tolerance_percent=2, policy="ff")
     assert moves and moves[0].destination_branch is hdd
+
+
+def test_planner_tries_another_ssd_when_fullest_has_no_scoped_files(tmp_path: Path) -> None:
+    empty_full = branch(tmp_path, "empty-full", used=90, free=10)
+    source = branch(tmp_path, "source", used=80, free=20)
+    hdd = branch(tmp_path, "hdd", used=0, free=100, rotational=True)
+    (source.path / "mover-test").mkdir()
+    (source.path / "mover-test" / "file.bin").write_bytes(b"12")
+    moves = plan_moves(
+        [empty_full, source], [hdd], PoolConfig(), watermark_percent=0,
+        tolerance_percent=0, policy="ff", scope=Path("mover-test"),
+    )
+    assert moves and moves[0].source_branch is source

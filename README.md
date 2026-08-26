@@ -44,6 +44,10 @@ sudo nas-mover --fstab /etc/fstab --mount /mnt/nas/data --scope mover-test
 sudo nas-mover --live --fstab /etc/fstab --mount /mnt/nas/data --scope mover-test
 ```
 
+Because the production SSD watermark is 80%, tiny fixtures normally produce a
+zero-move dry run. To force a scoped test move without changing production
+defaults, add `--watermark 0 --tolerance 0` to the test commands only.
+
 Use a dedicated mergerfs test pool for this sequence. The fixture command
 refuses filesystem roots and traversal outside its supplied sandbox, and
 cleanup removes only its named `test-*.bin` files.

@@ -19,6 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mount", type=str, default=None, help="Select one mergerfs mountpoint.")
     parser.add_argument("--lock", type=str, default=None, help="Override the lock path for testing or staging.")
     parser.add_argument("--scope", type=str, default=None, help="Restrict planning to a relative branch directory.")
+    parser.add_argument("--watermark", type=float, default=None, help="Override the SSD watermark percentage for testing.")
+    parser.add_argument("--tolerance", type=float, default=None, help="Override the SSD watermark tolerance for testing.")
     return parser
 
 
@@ -28,6 +30,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         fstab_path=Path(args.fstab) if args.fstab else MoverConfig().fstab_path,
         mount_override=Path(args.mount) if args.mount else MoverConfig().mount_override,
         lock_path=Path(args.lock) if args.lock else MoverConfig().lock_path,
+        watermark_percent=args.watermark if args.watermark is not None else MoverConfig().watermark_percent,
+        tolerance_percent=args.tolerance if args.tolerance is not None else MoverConfig().tolerance_percent,
     )
     scope = Path(args.scope) if args.scope else Path(".")
     if scope.is_absolute() or ".." in scope.parts:

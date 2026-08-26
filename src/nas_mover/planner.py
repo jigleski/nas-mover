@@ -85,7 +85,15 @@ def plan_moves(
             break
         candidate = next_file(source)
         if candidate is None:
-            break
+            for alternate in sorted(ssds, key=lambda b: b.simulated_used_percent, reverse=True):
+                if alternate is source or alternate.simulated_used_percent <= watermark_percent:
+                    continue
+                possible = next_file(alternate)
+                if possible is not None:
+                    source, candidate = alternate, possible
+                    break
+            else:
+                break
         reserves = [max(config.min_free_bytes, int(h.total_bytes * extra_free_percent / 100)) for h in hdds]
         eligible = [h for h, reserve in zip(hdds, reserves) if h.simulated_free_bytes - candidate.size >= reserve]
         destination = choose_destination(policy, eligible, candidate.relative_path, candidate.size, max(reserves, default=0))
