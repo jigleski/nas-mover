@@ -1,0 +1,48 @@
+# Copy this file to /etc/nas-mover/config.toml on the Linux NAS.
+# Keep this file outside the Git checkout for host-specific settings.
+
+# SSD usage percentage at which excess files may be sent to HDD branches.
+# Valid range: 0.0 through 100.0. Production default: 80.0.
+watermark_percent = 80.0
+
+# How far below the watermark an SSD may be before SSD-to-SSD balancing
+# is considered complete. Production default: 2.0.
+tolerance_percent = 2.0
+
+# Destination policy for SSD-to-HDD moves. Valid values:
+#   ff      first eligible branch in fstab order
+#   all     same branch selection as ff
+#   rand    random eligible branch
+#   pfrd    weighted random selection based on free space
+#   lfs     least free space
+#   lus     least used space
+#   lup     least used percentage
+#   mfs     most free space
+#   newest  branch with the newest existing parent directory
+#
+# Existing-path variants (only branches where the parent already exists):
+#   epff, epall, eprand, eppfrd, eplfs, eplus, epmfs
+#
+# Most-shared-path variants (prefer the branch sharing the deepest parent):
+#   msplfs, msplus, mspmfs, msppfrd
+#
+# The validated NAS currently uses eplfs.
+policy = "eplfs"
+
+# Ignore files newer than this many hours. 0.0 means no age filter.
+min_file_age_hours = 0.0
+
+# Additional percentage of each HDD's total capacity to keep free.
+# The larger of this value and mergerfs minfreespace is used. Production default: 0.0.
+extra_free_percent = 0.0
+
+# Copy verification mode. Valid values: "size" or "sha256".
+# size checks source stability and matching size; sha256 also hashes both files.
+verification = "size"
+
+# Host-specific Linux paths.
+# /etc/fstab is the standard Linux fstab location and is auto-detected by default.
+fstab_path = "/etc/fstab"
+# Set mount_override only when fstab contains more than one mergerfs pool.
+# mount_override = "/mnt/nas/data"
+lock_path = "/run/lock/nas-mover.lock"
