@@ -56,6 +56,64 @@ def test_execute_move_removes_bad_temporary_copy(tmp_path: Path, monkeypatch: py
     assert not list((tmp_path / "destination" / "nested").glob(".nas-mover.*.partial"))
 
 
+def test_execute_move_refuses_source_changed_during_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    move, source, _ = make_move(tmp_path)
+    original_copy = __import__("shutil").copy2
+
+    def changing_copy(source_path: Path, destination_path: Path) -> None:
+        original_copy(source_path, destination_path)
+        source_path.touch()
+
+    monkeypatch.setattr("nas_mover.transfer.shutil.copy2", changing_copy)
+    with pytest.raises(RuntimeError, match="changed"):
+        execute_move(move)
+    assert source.exists()
+
+
+def test_execute_move_refuses_size_mismatch_and_cleans_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    move, source, destination = make_move(tmp_path)
+    monkeypatch.setattr("nas_mover.transfer.shutil.copy2", lambda source_path, destination_path: destination_path.write_bytes(b"x"))
+    with pytest.raises(RuntimeError, match="size verification"):
+        execute_move(move)
+    assert source.exists()
+    assert not destination.exists()
+
+
+def test_execute_move_cleans_temp_when_replace_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    move, source, destination = make_move(tmp_path)
+    monkeypatch.setattr("nas_mover.transfer.os.replace", lambda *args: (_ for _ in ()).throw(OSError("replace failed")))
+    with pytest.raises(OSError, match="replace failed"):
+        execute_move(move)
+    assert source.exists()
+    assert not destination.exists()
+    assert not list(destination.parent.glob(".nas-mover.*.partial"))
+
+
+def test_execute_move_flushes_destination_directory_on_posix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    move, source, destination = make_move(tmp_path)
+    import nas_mover.transfer as transfer
+    monkeypatch.setattr(transfer.os, "O_DIRECTORY", 1, raising=False)
+    monkeypatch.setattr(transfer.os, "open", lambda *args: 42)
+    monkeypatch.setattr(transfer.os, "fsync", lambda fd: None)
+    monkeypatch.setattr(transfer.os, "close", lambda fd: None)
+    execute_move(move)
+    assert destination.exists()
+    assert not source.exists()
+
+
+def test_execute_move_tolerates_missing_temp_during_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    move, source, _ = make_move(tmp_path)
+
+    def replace_then_fail(temp_path: Path, destination_path: Path) -> None:
+        temp_path.unlink()
+        raise OSError("replace failed")
+
+    monkeypatch.setattr("nas_mover.transfer.os.replace", replace_then_fail)
+    with pytest.raises(OSError, match="replace failed"):
+        execute_move(move)
+    assert source.exists()
+
+
 def test_execute_move_rejects_unknown_verification_mode(tmp_path: Path) -> None:
     move, source, _ = make_move(tmp_path)
     with pytest.raises(ValueError, match="Unknown verification"):

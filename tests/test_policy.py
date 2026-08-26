@@ -38,6 +38,18 @@ def test_policy_returns_none_without_space(tmp_path: Path) -> None:
     assert choose_destination("ff", [full], Path("a"), 1) is None
 
 
+def test_msp_policy_returns_none_without_eligible_candidates(tmp_path: Path) -> None:
+    full = branch(tmp_path, "full-msp", used=100, free=0)
+    assert choose_destination("msplfs", [full], Path("a"), 1) is None
+
+
+def test_policy_reports_missing_handler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import nas_mover.policy as policy_module
+    monkeypatch.setattr(policy_module, "SUPPORTED_POLICIES", {"unhandled"})
+    with pytest.raises(ValueError, match="handler"):
+        choose_destination("unhandled", [branch(tmp_path, "handler", used=1, free=99)], Path("a"), 1)  # type: ignore[arg-type]
+
+
 def test_scan_files_ignores_mover_temporaries(tmp_path: Path) -> None:
     storage = branch(tmp_path, "storage", used=1, free=99)
     (storage.path / "keep").write_bytes(b"ok")
@@ -57,6 +69,28 @@ def test_scan_files_scope_excludes_other_branch_data(tmp_path: Path) -> None:
     ]
     with pytest.raises(ValueError, match="inside"):
         scan_files(storage, Path(".."))
+
+
+def test_scan_files_skips_unreadable_and_nonfile_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    storage = branch(tmp_path, "unreadable", used=1, free=99)
+    bad = storage.path / "bad.bin"
+    not_file = storage.path / "not-file.bin"
+    bad.write_bytes(b"bad")
+    not_file.write_bytes(b"not a file")
+    original_stat = Path.stat
+    original_is_file = Path.is_file
+
+    def stat(path: Path, *args, **kwargs):
+        if path == bad:
+            raise OSError("unreadable")
+        return original_stat(path, *args, **kwargs)
+
+    def is_file(path: Path):
+        return False if path == not_file else original_is_file(path)
+
+    monkeypatch.setattr(Path, "stat", stat)
+    monkeypatch.setattr(Path, "is_file", is_file)
+    assert scan_files(storage) == []
 
 
 @pytest.mark.parametrize("policy", ["all", "mfs", "lus", "rand", "pfrd", "newest"])
@@ -102,6 +136,36 @@ def test_planner_stops_when_source_has_no_candidates(tmp_path: Path) -> None:
     source = branch(tmp_path, "source", used=90, free=10)
     other = branch(tmp_path, "other", used=80, free=20)
     assert plan_moves([source, other], [], PoolConfig(), watermark_percent=80, tolerance_percent=2, policy="ff") == []
+
+
+def test_planner_stops_hdd_phase_when_nothing_exceeds_watermark(tmp_path: Path) -> None:
+    first = branch(tmp_path, "below-first", used=10, free=90)
+    second = branch(tmp_path, "below-second", used=20, free=80)
+    hdd = branch(tmp_path, "below-hdd", used=0, free=100, rotational=True)
+    assert plan_moves([first, second], [hdd], PoolConfig(), watermark_percent=80, tolerance_percent=2, policy="ff") == []
+
+
+def test_planner_stops_when_fullest_source_is_at_watermark(tmp_path: Path) -> None:
+    first = branch(tmp_path, "at-first", used=80, free=20)
+    second = branch(tmp_path, "at-second", used=70, free=30)
+    hdd = branch(tmp_path, "at-hdd", used=0, free=100, rotational=True)
+    assert plan_moves([first, second], [hdd], PoolConfig(), watermark_percent=80, tolerance_percent=2, policy="ff") == []
+
+
+def test_planner_stops_hdd_phase_when_source_is_below_test_watermark(tmp_path: Path) -> None:
+    first = branch(tmp_path, "below-test-first", used=80, free=20)
+    second = branch(tmp_path, "below-test-second", used=70, free=30)
+    hdd = branch(tmp_path, "below-test-hdd", used=0, free=100, rotational=True)
+    assert plan_moves([first, second], [hdd], PoolConfig(), watermark_percent=100, tolerance_percent=40, policy="ff") == []
+
+
+def test_planner_skips_existing_ssd_destination(tmp_path: Path) -> None:
+    source = branch(tmp_path, "existing-source", used=90, free=10)
+    destination = branch(tmp_path, "existing-destination", used=20, free=80)
+    hdd = branch(tmp_path, "existing-hdd", used=0, free=100, rotational=True)
+    (source.path / "file.bin").write_bytes(b"data")
+    (destination.path / "file.bin").write_bytes(b"already there")
+    assert plan_moves([source, destination], [hdd], PoolConfig(), watermark_percent=80, tolerance_percent=2, policy="ff") == []
 
 
 def test_planner_balances_ssd_before_spilling_to_hdd(tmp_path: Path) -> None:

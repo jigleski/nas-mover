@@ -7,8 +7,8 @@ from typing import Iterator
 
 
 @contextmanager
-def process_lock(path: Path) -> Iterator[None]:
-    if os.name != "posix":
+def process_lock(path: Path, *, platform_name: str | None = None) -> Iterator[None]:
+    if (platform_name or os.name) != "posix":
         yield
         return
     import fcntl
