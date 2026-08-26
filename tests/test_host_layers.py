@@ -141,3 +141,8 @@ def test_cli_is_dry_run_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     assert run(["--live", "--fstab", str(fstab), "--mount", "/pool", "--lock", str(lock)]) == 0
     assert execute.called
+
+
+def test_cli_rejects_escaping_scope(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="relative"):
+        run(["--scope", "../outside"])

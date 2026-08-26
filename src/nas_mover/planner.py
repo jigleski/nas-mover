@@ -7,9 +7,13 @@ from .models import Branch, CandidateFile, PlannedMove, PoolConfig
 from .policy import Policy, choose_destination
 
 
-def scan_files(branch: Branch) -> list[CandidateFile]:
+def scan_files(branch: Branch, scope: Path = Path(".")) -> list[CandidateFile]:
+    try:
+        (branch.path / scope).resolve().relative_to(branch.path.resolve())
+    except ValueError as exc:
+        raise ValueError(f"Scope must remain inside branch: {scope}") from exc
     candidates: list[CandidateFile] = []
-    for root, dirs, files in os.walk(branch.path, topdown=True, followlinks=False):
+    for root, dirs, files in os.walk(branch.path / scope, topdown=True, followlinks=False):
         dirs[:] = [name for name in dirs if not name.startswith(".nas-mover.")]
         for name in files:
             if name.startswith(".nas-mover."):
@@ -48,10 +52,11 @@ def plan_moves(
     tolerance_percent: float,
     policy: Policy,
     extra_free_percent: float = 0,
+    scope: Path = Path("."),
 ) -> list[PlannedMove]:
     if not ssds:
         return []
-    candidates = {branch.path: scan_files(branch) for branch in ssds}
+    candidates = {branch.path: scan_files(branch, scope) for branch in ssds}
     planned: list[PlannedMove] = []
     used: set[tuple[Path, Path]] = set()
     lower = watermark_percent - tolerance_percent

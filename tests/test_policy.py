@@ -47,6 +47,18 @@ def test_scan_files_ignores_mover_temporaries(tmp_path: Path) -> None:
     assert [item.relative_path for item in scan_files(storage)] == [Path("keep")]
 
 
+def test_scan_files_scope_excludes_other_branch_data(tmp_path: Path) -> None:
+    storage = branch(tmp_path, "storage", used=1, free=99)
+    (storage.path / "mover-test").mkdir()
+    (storage.path / "mover-test" / "inside.bin").write_bytes(b"inside")
+    (storage.path / "production.bin").write_bytes(b"outside")
+    assert [item.relative_path for item in scan_files(storage, Path("mover-test"))] == [
+        Path("mover-test/inside.bin")
+    ]
+    with pytest.raises(ValueError, match="inside"):
+        scan_files(storage, Path(".."))
+
+
 @pytest.mark.parametrize("policy", ["all", "mfs", "lus", "rand", "pfrd", "newest"])
 def test_policy_families_select_a_usable_branch(tmp_path: Path, policy: str) -> None:
     first = branch(tmp_path, "first", used=10, free=90)

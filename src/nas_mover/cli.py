@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fstab", type=str, default=None, help="Override the fstab path.")
     parser.add_argument("--mount", type=str, default=None, help="Select one mergerfs mountpoint.")
     parser.add_argument("--lock", type=str, default=None, help="Override the lock path for testing or staging.")
+    parser.add_argument("--scope", type=str, default=None, help="Restrict planning to a relative branch directory.")
     return parser
 
 
@@ -28,6 +29,9 @@ def run(argv: Sequence[str] | None = None) -> int:
         mount_override=Path(args.mount) if args.mount else MoverConfig().mount_override,
         lock_path=Path(args.lock) if args.lock else MoverConfig().lock_path,
     )
+    scope = Path(args.scope) if args.scope else Path(".")
+    if scope.is_absolute() or ".." in scope.parts:
+        raise ValueError("scope must be a relative directory inside each branch")
     config.validate()
     with process_lock(config.lock_path):
         pool = parse_fstab(config.fstab_path, config.mount_override)
@@ -44,6 +48,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             tolerance_percent=config.tolerance_percent,
             policy=config.policy,
             extra_free_percent=config.extra_free_percent,
+            scope=scope,
         )
         print(f"{'LIVE' if args.live else 'DRY RUN'}: {len(moves)} move(s) planned")
         for move in moves:

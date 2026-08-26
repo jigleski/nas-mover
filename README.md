@@ -35,6 +35,15 @@ nas-mover --live --fstab /etc/fstab --mount /mnt/nas/data
 nas-mover-test-fixtures /mnt/nas/ssd1-data/data/mover-test --cleanup
 ```
 
+For a production pool containing a test directory, add `--scope mover-test`
+to both mover commands. This restricts planning to that relative directory on
+each branch:
+
+```text
+sudo nas-mover --fstab /etc/fstab --mount /mnt/nas/data --scope mover-test
+sudo nas-mover --live --fstab /etc/fstab --mount /mnt/nas/data --scope mover-test
+```
+
 Use a dedicated mergerfs test pool for this sequence. The fixture command
 refuses filesystem roots and traversal outside its supplied sandbox, and
 cleanup removes only its named `test-*.bin` files.
