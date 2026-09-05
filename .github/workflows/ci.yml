@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required:
+    name: Required checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: debian:13-slim
+
+    steps:
+      - name: Install CI dependencies
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates \
+            git \
+            python3 \
+            python3-pytest \
+            python3-pytest-cov \
+            shellcheck
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Trust checked-out repository
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Run Python tests with coverage
+        id: python
+        continue-on-error: true
+        shell: bash
+        env:
+          PYTHONPATH: src
+        run: python3 -B -m pytest -v
+
+      - name: Validate tracked TOML files
+        id: toml
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import tomllib
+
+          files = sorted(
+              p for p in pathlib.Path('.').rglob('*')
+              if p.is_file()
+              and (p.suffix == '.toml' or p.name.endswith('.toml.example'))
+              and '.git' not in p.parts
+          )
+          for path in files:
+              with path.open('rb') as stream:
+                  tomllib.load(stream)
+              print(f'OK {path}')
+          PY
+
+      - name: Run ShellCheck
+        id: shellcheck
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          tracked_files=$(mktemp)
+          git ls-files -z > "$tracked_files"
+
+          scripts=()
+          while IFS= read -r -d '' file; do
+            IFS= read -r first_line < "$file" || true
+            if [[ "$first_line" =~ ^\#!.*(/bin/(ba)?sh|/usr/bin/env\ (ba)?sh)([[:space:]]|$) ]]; then
+              scripts+=("$file")
+            fi
+          done < "$tracked_files"
+          rm -f "$tracked_files"
+
+          if ((${#scripts[@]} == 0)); then
+            echo 'No tracked shell scripts found.'
+            exit 0
+          fi
+
+          printf 'ShellCheck targets (%d):\n' "${#scripts[@]}"
+          printf '  %s\n' "${scripts[@]}"
+          shellcheck "${scripts[@]}"
+
+      - name: Enforce required checks
+        if: always()
+        shell: bash
+        env:
+          PYTHON_OUTCOME: ${{ steps.python.outcome }}
+          TOML_OUTCOME: ${{ steps.toml.outcome }}
+          SHELLCHECK_OUTCOME: ${{ steps.shellcheck.outcome }}
+        run: |
+          printf 'Python/coverage: %s\n' "$PYTHON_OUTCOME"
+          printf 'TOML validation: %s\n' "$TOML_OUTCOME"
+          printf 'ShellCheck: %s\n' "$SHELLCHECK_OUTCOME"
+
+          failed=0
+          for outcome in "$PYTHON_OUTCOME" "$TOML_OUTCOME" "$SHELLCHECK_OUTCOME"; do
+            [[ "$outcome" == "success" ]] || failed=1
+          done
+          exit "$failed"
